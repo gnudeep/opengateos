@@ -1,0 +1,263 @@
+{
+  "system": {
+    "hostname": "harvester-gw",
+    "domain": "infra.local",
+    "dns": {
+      "nameservers": ["1.1.1.1", "8.8.8.8"]
+    },
+    "ntp": {
+      "servers": ["pool.ntp.org"]
+    },
+    "syslog": {
+      "global": {"facility": "all", "level": "info"}
+    }
+  },
+  "interfaces": {
+    "ethernet": {
+      "eth0": {
+        "description": "WAN uplink (VLAN 100)",
+        "address": ["203.0.113.2/24"],
+        "enabled": true
+      },
+      "eth1": {
+        "description": "Trunk to internal VLANs",
+        "mtu": 9000,
+        "enabled": true
+      }
+    },
+    "vlan": {
+      "vlan10": {
+        "id": 10,
+        "link": "eth1",
+        "description": "Public services",
+        "address": ["10.10.0.1/24"],
+        "mtu": 9000
+      },
+      "vlan20": {
+        "id": 20,
+        "link": "eth1",
+        "description": "Private / application tier",
+        "address": ["10.20.0.1/24"],
+        "mtu": 9000
+      },
+      "vlan30": {
+        "id": 30,
+        "link": "eth1",
+        "description": "System / platform services",
+        "address": ["10.30.0.1/24"],
+        "mtu": 9000
+      },
+      "vlan40": {
+        "id": 40,
+        "link": "eth1",
+        "description": "Data tier (PostgreSQL, Redis, Kafka)",
+        "address": ["10.40.0.1/24"],
+        "mtu": 9000
+      }
+    },
+    "loopback": {
+      "lo": {
+        "address": ["127.0.0.1/8", "10.255.255.1/32"]
+      }
+    }
+  },
+  "protocols": {
+    "static": {
+      "routes": {
+        "0.0.0.0/0": {
+          "next_hop": "203.0.113.1"
+        }
+      }
+    }
+  },
+  "firewall": {
+    "rules": {
+      "input": {
+        "allow-ssh": {
+          "protocol": "tcp",
+          "dport": "22",
+          "action": "accept"
+        },
+        "allow-dns-vlan10": {
+          "iif": "vlan10",
+          "protocol": "udp",
+          "dport": "53",
+          "action": "accept"
+        },
+        "allow-dns-vlan20": {
+          "iif": "vlan20",
+          "protocol": "udp",
+          "dport": "53",
+          "action": "accept"
+        },
+        "allow-dns-vlan30": {
+          "iif": "vlan30",
+          "protocol": "udp",
+          "dport": "53",
+          "action": "accept"
+        },
+        "allow-dns-vlan40": {
+          "iif": "vlan40",
+          "protocol": "udp",
+          "dport": "53",
+          "action": "accept"
+        },
+        "allow-dns-tcp-vlan10": {
+          "iif": "vlan10",
+          "protocol": "tcp",
+          "dport": "53",
+          "action": "accept"
+        },
+        "allow-dns-tcp-vlan20": {
+          "iif": "vlan20",
+          "protocol": "tcp",
+          "dport": "53",
+          "action": "accept"
+        },
+        "allow-dns-tcp-vlan30": {
+          "iif": "vlan30",
+          "protocol": "tcp",
+          "dport": "53",
+          "action": "accept"
+        },
+        "allow-dns-tcp-vlan40": {
+          "iif": "vlan40",
+          "protocol": "tcp",
+          "dport": "53",
+          "action": "accept"
+        },
+        "allow-dhcp-vlan10": {
+          "iif": "vlan10",
+          "protocol": "udp",
+          "dport": "67",
+          "action": "accept"
+        },
+        "allow-dhcp-vlan20": {
+          "iif": "vlan20",
+          "protocol": "udp",
+          "dport": "67",
+          "action": "accept"
+        },
+        "allow-dhcp-vlan30": {
+          "iif": "vlan30",
+          "protocol": "udp",
+          "dport": "67",
+          "action": "accept"
+        },
+        "allow-dhcp-vlan40": {
+          "iif": "vlan40",
+          "protocol": "udp",
+          "dport": "67",
+          "action": "accept"
+        },
+        "allow-icmp": {
+          "protocol": "icmp type echo-request",
+          "action": "accept"
+        }
+      },
+      "forward": {
+        "deny-public-to-private": {
+          "iif": "vlan10",
+          "oif": "vlan20",
+          "action": "drop"
+        },
+        "deny-public-to-system": {
+          "iif": "vlan10",
+          "oif": "vlan30",
+          "action": "drop"
+        },
+        "deny-public-to-data": {
+          "iif": "vlan10",
+          "oif": "vlan40",
+          "action": "drop"
+        },
+        "allow-private-to-system": {
+          "iif": "vlan20",
+          "oif": "vlan30",
+          "action": "accept"
+        },
+        "allow-private-to-data-db": {
+          "iif": "vlan20",
+          "oif": "vlan40",
+          "protocol": "tcp",
+          "dport": "5432, 6379, 9092",
+          "action": "accept"
+        },
+        "allow-system-to-data-db": {
+          "iif": "vlan30",
+          "oif": "vlan40",
+          "protocol": "tcp",
+          "dport": "5432, 6379, 9092",
+          "action": "accept"
+        },
+        "deny-data-outbound": {
+          "iif": "vlan40",
+          "oif": "eth0",
+          "action": "drop"
+        },
+        "allow-private-internet": {
+          "iif": "vlan20",
+          "oif": "eth0",
+          "action": "accept"
+        },
+        "allow-system-internet": {
+          "iif": "vlan30",
+          "oif": "eth0",
+          "action": "accept"
+        }
+      }
+    },
+    "nat": {
+      "masquerade-outbound": {
+        "oif": "eth0",
+        "action": "masquerade"
+      }
+    }
+  },
+  "services": {
+    "ssh": {
+      "port": 22,
+      "enabled": true
+    },
+    "dhcp": {
+      "vlan10": {
+        "interface": "vlan10",
+        "range_start": "10.10.0.100",
+        "range_end": "10.10.0.200",
+        "lease_time": "12h",
+        "gateway": "10.10.0.1",
+        "dns_server": "10.10.0.1"
+      },
+      "vlan20": {
+        "interface": "vlan20",
+        "range_start": "10.20.0.100",
+        "range_end": "10.20.0.200",
+        "lease_time": "12h",
+        "gateway": "10.20.0.1",
+        "dns_server": "10.20.0.1"
+      },
+      "vlan30": {
+        "interface": "vlan30",
+        "range_start": "10.30.0.100",
+        "range_end": "10.30.0.200",
+        "lease_time": "12h",
+        "gateway": "10.30.0.1",
+        "dns_server": "10.30.0.1"
+      },
+      "vlan40": {
+        "interface": "vlan40",
+        "range_start": "10.40.0.100",
+        "range_end": "10.40.0.200",
+        "lease_time": "12h",
+        "gateway": "10.40.0.1",
+        "dns_server": "10.40.0.1"
+      }
+    },
+    "dns-forwarding": {
+      "listen_addresses": ["10.10.0.1", "10.20.0.1", "10.30.0.1", "10.40.0.1"],
+      "upstream_servers": ["1.1.1.1", "8.8.8.8"],
+      "cache_size": 1000,
+      "domain": "infra.local"
+    }
+  }
+}
