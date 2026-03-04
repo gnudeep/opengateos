@@ -1,0 +1,15 @@
+[Unit]
+Description=Load router config at boot
+After=network-pre.target systemd-networkd.service
+Before=network.target frr.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/routercli load-boot
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

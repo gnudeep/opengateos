@@ -1,0 +1,202 @@
+{
+  "system": {
+    "hostname": "gw-router-01",
+    "domain": "infra.local",
+    "dns": {
+      "nameservers": ["1.1.1.1", "8.8.8.8"]
+    },
+    "ntp": {
+      "servers": ["pool.ntp.org"]
+    },
+    "syslog": {
+      "global": {"facility": "all", "level": "info"}
+    }
+  },
+  "interfaces": {
+    "ethernet": {
+      "eth0": {
+        "description": "Uplink / WAN",
+        "address": ["203.0.113.2/24"],
+        "enabled": true
+      },
+      "eth1": {
+        "description": "Trunk to Cisco 2960-S",
+        "mtu": 9000,
+        "enabled": true
+      },
+      "eth2": {
+        "description": "Management / OOB",
+        "address": ["10.255.0.1/24"],
+        "enabled": true
+      }
+    },
+    "vlan": {
+      "vlan10": {
+        "id": 10,
+        "link": "eth1",
+        "description": "Public services",
+        "address": ["10.10.0.1/24"],
+        "mtu": 9000
+      },
+      "vlan20": {
+        "id": 20,
+        "link": "eth1",
+        "description": "Private / application tier",
+        "address": ["10.20.0.1/24"],
+        "mtu": 9000
+      },
+      "vlan30": {
+        "id": 30,
+        "link": "eth1",
+        "description": "System / platform services",
+        "address": ["10.30.0.1/24"],
+        "mtu": 9000
+      },
+      "vlan40": {
+        "id": 40,
+        "link": "eth1",
+        "description": "Data tier (PostgreSQL, Redis, Kafka)",
+        "address": ["10.40.0.1/24"],
+        "mtu": 9000
+      }
+    },
+    "loopback": {
+      "lo": {
+        "address": ["127.0.0.1/8", "10.255.255.1/32"]
+      }
+    }
+  },
+  "vrf": {
+    "vrf-public": {
+      "table": 100,
+      "interfaces": ["eth0", "vlan10"],
+      "rules": [
+        "from 10.10.0.0/24",
+        "from 203.0.113.0/24"
+      ]
+    },
+    "vrf-private": {
+      "table": 200,
+      "interfaces": ["vlan20", "vlan30"],
+      "rules": [
+        "from 10.20.0.0/24",
+        "from 10.30.0.0/24"
+      ]
+    },
+    "vrf-data": {
+      "table": 300,
+      "interfaces": ["vlan40"],
+      "rules": [
+        "from 10.40.0.0/24"
+      ]
+    },
+    "vrf-mgmt": {
+      "table": 400,
+      "interfaces": ["eth2"],
+      "rules": [
+        "from 10.255.0.0/24"
+      ]
+    }
+  },
+  "protocols": {
+    "static": {
+      "routes": {
+        "0.0.0.0/0": {
+          "next_hop": "203.0.113.1",
+          "vrf": "vrf-public"
+        }
+      }
+    },
+    "ospf": {
+      "vrf-private": {
+        "router_id": "10.20.0.1",
+        "networks": [
+          {"prefix": "10.20.0.0/24", "area": "0"},
+          {"prefix": "10.30.0.0/24", "area": "0"}
+        ]
+      }
+    },
+    "bgp": {
+      "vrf-public": {
+        "asn": 65001,
+        "router_id": "203.0.113.2",
+        "neighbors": [
+          {"address": "203.0.113.1", "asn": 65000}
+        ],
+        "redistribute": ["connected", "static"]
+      },
+      "vrf-private": {
+        "asn": 65001,
+        "router_id": "10.20.0.1",
+        "redistribute": ["connected"],
+        "import_vrf": ["vrf-public"]
+      }
+    }
+  },
+  "firewall": {
+    "rules": {
+      "input": {
+        "allow-ssh-mgmt": {
+          "iif": "eth2",
+          "protocol": "tcp",
+          "dport": "22",
+          "action": "accept"
+        },
+        "allow-http-public": {
+          "iif": "vlan10",
+          "protocol": "tcp",
+          "dport": "80, 443",
+          "action": "accept"
+        },
+        "allow-icmp": {
+          "protocol": "icmp type echo-request",
+          "action": "accept"
+        }
+      },
+      "forward": {
+        "deny-public-to-private": {
+          "iif": "vlan10",
+          "oif": "vlan20",
+          "action": "drop"
+        },
+        "allow-private-inter": {
+          "iif": "vlan20",
+          "oif": "vlan30",
+          "action": "accept"
+        },
+        "allow-private-to-data-db": {
+          "iif": "vlan20",
+          "oif": "vlan40",
+          "protocol": "tcp",
+          "dport": "5432, 6379, 9092",
+          "action": "accept"
+        },
+        "deny-data-outbound": {
+          "iif": "vlan40",
+          "oif": "eth0",
+          "action": "drop"
+        },
+        "allow-private-internet": {
+          "iif": "vlan20",
+          "oif": "eth0",
+          "action": "accept"
+        }
+      }
+    },
+    "nat": {
+      "masquerade-outbound": {
+        "oif": "eth0",
+        "action": "masquerade"
+      }
+    }
+  },
+  "services": {
+    "ssh": {
+      "port": 22,
+      "enabled": true,
+      "listen_vrf": "vrf-mgmt"
+    },
+    "dhcp": {},
+    "dns-forwarding": {}
+  }
+}

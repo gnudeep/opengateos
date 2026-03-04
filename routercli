@@ -1,0 +1,38 @@
+#!/bin/bash
+# /usr/local/bin/routercli
+# VyOS-like CLI wrapper for the config management system
+#
+# Usage:
+#   routercli edit                         - Start config session
+#   routercli set <path> <value>           - Set config value
+#   routercli delete <path>                - Delete config node
+#   routercli show [--path <path>]         - Show candidate config
+#   routercli compare                      - Diff active vs candidate
+#   routercli commit [--comment "msg"]     - Apply changes
+#   routercli commit --confirm 10          - Apply with 10-min auto-rollback
+#   routercli confirm                      - Cancel auto-rollback
+#   routercli save                         - Persist to boot config
+#   routercli discard                      - Discard changes
+#   routercli rollback [N]                 - Rollback N revisions
+#   routercli history                      - Show revision history
+#
+# Example workflow:
+#   routercli edit
+#   routercli set interfaces.ethernet.eth0.address "10.0.0.1/24"
+#   routercli set interfaces.vlan.vlan100.id 100
+#   routercli set interfaces.vlan.vlan100.link eth1
+#   routercli set interfaces.vlan.vlan100.address "10.100.0.1/24"
+#   routercli set vrf.vrf-private.table 200
+#   routercli set vrf.vrf-private.interfaces "vlan100"
+#   routercli compare
+#   routercli commit --comment "added private vlan" --confirm 5
+#   # verify connectivity ...
+#   routercli confirm
+#   routercli save
+
+set -e
+
+SCRIPT_DIR="/usr/local/lib/routeros"
+PYTHON="/usr/bin/python3"
+
+exec $PYTHON "${SCRIPT_DIR}/config_manager.py" "$@"
